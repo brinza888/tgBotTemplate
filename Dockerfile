@@ -1,40 +1,41 @@
-FROM python:3.10-slim
+ARG PYTHON_VERSION=3.10
+FROM python:${PYTHON_VERSION}-slim
 
-## prepare environment
-RUN pip install pip-tools
+# avoid .pyc and buffering stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-RUN useradd -ms /bin/sh bot
-RUN mkdir /config /logs
-RUN chown -R bot:bot /config /logs
+# add non-root user
+ARG UID=1000
+RUN adduser \
+    --disabled-password \
+    --no-create-home \
+    --uid "${UID}" \
+    --home "/app" \
+    bot
 
-COPY --chmod=777 docker-entrypoint.sh /
-
+# prepare directories
+RUN mkdir /config /app
+RUN chown -R bot:bot /config /app
 WORKDIR /app
-##
 
-## install only requirements.txt
-COPY pyproject.toml ./
+# install requirements
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=bind,source=requirements.txt,target=requirements.txt \
+    pip install -r requirements.txt
 
-RUN pip-compile -o requirements.txt pyproject.toml
-RUN pip install -r requirements.txt
-##
+# copy default configs
+COPY config.toml config_env_mapping.toml /config
+VOLUME /config
 
-## install package
-COPY src ./src/
-COPY config.toml config_env_mapping.toml ./
-
+# copy sources and install project
+COPY pyproject.toml .
+COPY src src
 RUN pip install .
-##
 
+# set defaults for bot configuration
 ENV STATE_STORAGE_TYPE=memory
-ENV MYAPP_LOGGER_FILE_PATH=/logs/myapp.log
-ENV MYAPP_BOT_LOGGER_FILE_PATH=/logs/bot.log
 
 USER bot
-WORKDIR /
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["launch-polling", "-e", "-m", "/config/config_env_mapping.toml", "/config/config.toml"]
-
-VOLUME /config
-VOLUME /logs
