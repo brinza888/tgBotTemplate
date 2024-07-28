@@ -11,13 +11,8 @@ RUN adduser \
     --disabled-password \
     --no-create-home \
     --uid "${UID}" \
-    --home "/app" \
+    --home "/" \
     bot
-
-# prepare directories
-RUN mkdir /config /app
-RUN chown -R bot:bot /config /app
-WORKDIR /app
 
 # install requirements
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -25,12 +20,15 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 
 # copy default configs
-COPY config.toml config_env_mapping.toml /config
+COPY --chown=bot config.toml config_env_mapping.toml /config/
 VOLUME /config
 
 # copy sources and install project
-COPY pyproject.toml .
-COPY src src
+COPY --chown=bot pyproject.toml /app/
+COPY --chown=bot src /app/src
+
+# install package
+WORKDIR /app
 RUN pip install .
 
 # set defaults for bot configuration
